@@ -1,0 +1,217 @@
+# Compiled Object files
+*.slo
+*.lo
+*.o
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+struct st_common_data
+{
+    HANDLE event_array[ EVENT_ARRAY_SIZE ];
+    unsigned int    count_of_start_events;	
+    unsigned int    count_of_stop_events;
+    unsigned int    count_of_exit_events;
+    unsigned int    count_of_timeout_events;
+    unsigned int    count_of_unexpected_return_value;
+};
+
+#include "Common_Structure.h"
+unsigned int __stdcall  Start_As_Thread( void * p_void_pointer );
+class C_TCP_Thread
+{
+public:
+    C_TCP_Thread( void * ptr_common_data );
+    ~C_TCP_Thread(void);
+    void Main_TCP_Thread( );
+private:
+    st_common_data * mp_common_data;
+};
+
+unsigned int __stdcall  Start_As_Thread( void * p_void_pointer )
+  {
+    C_TCP_Thread *     mp_C_TCP_Thread;
+    mp_C_TCP_Thread =  new C_TCP_Thread( p_void_pointer );
+    mp_C_TCP_Thread->Main_TCP_Thread();
+    delete mp_C_TCP_Thread;
+    _endthreadex( 0 );
+    return 0;
+  };
+
+	C_TCP_Thread::C_TCP_Thread( void * ptr_common_data )
+{
+    mp_common_data = ( st_common_data * ) ptr_common_data;
+}
+
+void C_TCP_Thread::Main_TCP_Thread( )
+{
+    bool done = false;
+    DWORD event_triggered  = 0;
+    
+    while( !done )
+    {       // This is the key Windows API call.
+            // Wait here until any of the events are triggered,
+            // to include the timeout event.
+        event_triggered = WaitForMultipleObjects(
+            EVENT_ARRAY_SIZE,
+            mp_common_data->event_array,
+            WAIT_FOR_ANY_EVENT,
+            WAIT_TIMEOUT_VALUE );
+
+            //  This only does enough to show that each event is detected 
+            //  separate from the others.
+            //  Note that these are only starter/demo events.
+            //  When code is added for TCP/IP operations those events
+            //  will be added along with an FSM to manage the TCP/IP
+            //  operations.  (Finite State Machine)
+        switch( event_triggered )
+        {
+                // Check out these constants in Common_Structure.h.
+        case EVENT_RETURN_START_RUNNING:
+            {
+                mp_common_data->count_of_start_events ++;
+                break;
+            }
+        case EVENT_RETURN_STOP_RUNNING:
+            {
+                mp_common_data->count_of_stop_events ++;
+                break;
+            }
+        case EVENT_RETURN_THREAD_EXIT:
+            {
+                mp_common_data->count_of_exit_events ++;
+                done = true;
+                break;
+            }
+        case WAIT_TIMEOUT:
+            {
+                mp_common_data->count_of_timeout_events ++;
+                break;
+            }
+        default:
+            {
+                mp_common_data->count_of_unexpected_return_value ++;
+                break;
+            }
+        }
+
+    } // end of: while( !done )
+}
+const DWORD EVENT_RETURN_START_RUNNING = WAIT_OBJECT_0;
+   const DWORD EVENT_RETURN_STOP_RUNNING  = EVENT_RETURN_START_RUNNING + 1;
+   const DWORD EVENT_RETURN_THREAD_EXIT   = EVENT_RETURN_STOP_RUNNING + 1;
+const unsigned int EVENT_START_RUNNING = 0;
+   const unsigned int EVENT_STOP_RUNNING  = EVENT_START_RUNNING + 1;
+   const unsigned int EVENT_THREAD_EXIT   = EVENT_STOP_RUNNING + 1;
+
+   const unsigned int EVENT_ARRAY_SIZE    = EVENT_THREAD_EXIT + 1;
+
+void CStart_New_Thread_2Dlg::OnBnClickedBtnCreateEvents()
+{
+    const unsigned int STRING_LENGTH = 16;
+    char  event_number[ STRING_LENGTH ];
+    LPSECURITY_ATTRIBUTES NO_SECURITY_ATTRIBUTES = NULL;
+
+    const bool  EVENT_TYPE_MANUAL_RESET = TRUE;
+    const bool  EVENT_TYPE_AUTO_RESET   = FALSE;
+
+    const bool  INITIALIZE_AS_TRIGGERED = TRUE;
+    const bool  INITIALIZE_AS_RESET     = FALSE;
+    LPCTSTR     NO_EVENT_NAME           = NULL;
+
+    m_common_data.event_array[ EVENT_START_RUNNING ] = 
+        CreateEvent(  NO_SECURITY_ATTRIBUTES,
+                      EVENT_TYPE_AUTO_RESET,
+                      INITIALIZE_AS_RESET,
+                      NO_EVENT_NAME );
+
+    m_common_data.event_array[ EVENT_STOP_RUNNING ] = 
+        CreateEvent(  NO_SECURITY_ATTRIBUTES,
+                      EVENT_TYPE_AUTO_RESET,
+                      INITIALIZE_AS_RESET,
+                      NO_EVENT_NAME );
+
+    m_common_data.event_array[ EVENT_THREAD_EXIT ] = 
+        CreateEvent(  NO_SECURITY_ATTRIBUTES,
+                      EVENT_TYPE_AUTO_RESET,
+                      INITIALIZE_AS_RESET,
+                      NO_EVENT_NAME );
+
+    sprintf_s( event_number, 
+               STRING_LENGTH, 
+              "%d", 
+              m_common_data.event_array[ EVENT_START_RUNNING ] );
+    m_start_event_handle.SetWindowTextA( event_number );
+
+    sprintf_s( event_number, 
+               STRING_LENGTH, 
+              "%d", 
+              m_common_data.event_array[ EVENT_STOP_RUNNING ] );
+    m_stop_event_handle.SetWindowTextA( event_number );
+
+    sprintf_s( event_number, 
+               STRING_LENGTH, 
+              "%d", 
+              m_common_data.event_array[ EVENT_THREAD_EXIT ] );
+    m_exit_event_handle.SetWindowTextA( event_number );
+}
+
+void CStart_New_Thread_2Dlg::OnBnClickedBtnEventExit()
+{
+    BOOL status = SetEvent( m_common_data.event_array[ EVENT_THREAD_EXIT ]); 
+}	
+
+	void CStart_New_Thread_2Dlg::OnBnClicked_Create_Simple_Thread()
+{
+    const int DISPLAY_MAX = 50;
+    char  t_string[ DISPLAY_MAX ];
+
+	  // Do not start the thread until the events have been created.
+    if( m_common_data.event_array[ EVENT_START_RUNNING ] == 0 )
+    {
+        m_thread_start_status.SetWindowTextA( "Create Events First" );
+        return;
+    }
+
+    // These few lines start the free standing procedure as a thread.
+    // That function instantiates the class and calls its main method.
+    void *         NO_SECURITY_ATTRIBUTES = NULL;
+    const unsigned USE_DEFAULT_STACK_SIZE = 0;
+    const unsigned CREATE_IN_RUN_STATE    = 0;
+
+    uintptr_t thread_pointer;
+    thread_pointer = _beginthreadex( NO_SECURITY_ATTRIBUTES,
+                                     USE_DEFAULT_STACK_SIZE,
+                                     &Start_As_Thread,
+                                     &m_common_data,
+                                     CREATE_IN_RUN_STATE,
+                                     &m_thread_address);
+    if( thread_pointer == 0 )
+    {
+       m_return_value  = _get_errno( &m_thread_start_error );
+       if( m_return_value == 0 )
+       {
+           sprintf_s( t_string, DISPLAY_MAX, "Create Fail, error %d", m_thread_start_error  );
+       }
+       else
+       {
+           sprintf_s( t_string, DISPLAY_MAX,    
+           "Create Fail, get_errno fail, returned %d", m_return_value  );
+       }
+    }
+    else
+    {
+        sprintf_s( t_string, DISPLAY_MAX, "Thread Created" );
+    }
+    
+    m_thread_start_status.SetWindowTextA( t_string );
+}
+
+    mp_common_data->count_of_unexpected_return_value
+
+
